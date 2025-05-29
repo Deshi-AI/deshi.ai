@@ -1,10 +1,12 @@
+FILE: src/pages/Index.tsx
+================================================
 import React, { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Brain, Clock, Rocket, Share2, Workflow, Users, MessageSquare, Search, PlugZap, FileText, GraduationCap, UserCog, AlertTriangle, ArchiveX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom'; // <--- IMPORT THIS
+import { useNavigate } from 'react-router-dom'; // Ensure useNavigate is imported
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -13,7 +15,7 @@ const Index = () => {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate(); // <--- INITIALIZE THE HOOK
+  const navigate = useNavigate(); // Initialize useNavigate
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -46,7 +48,10 @@ const Index = () => {
         });
       });
 
-      document.addEventListener('click', (e) => {
+      // This event listener for particle animation should not interfere with button clicks.
+      // It's better to scope such listeners if possible, but it's unlikely to be the cause
+      // if navigation is already occurring.
+      const clickHandler = (e: MouseEvent) => {
         particles.forEach((particle) => {
           gsap.to(particle as HTMLElement, {
             scale: "random(1.5, 2.5)",
@@ -57,7 +62,8 @@ const Index = () => {
             repeat: 1
           });
         });
-      });
+      };
+      document.addEventListener('click', clickHandler);
 
       gsap.to(".pulse-particle", {
         scale: "random(1.5, 3)",
@@ -123,11 +129,16 @@ const Index = () => {
 
     }, heroRef);
 
-    return () => ctx.revert();
+    // Cleanup function for the document event listener
+    return () => {
+      document.removeEventListener('click', (ctx.data as any).clickHandler); // Assuming clickHandler was stored in ctx.data or made accessible
+      ctx.revert();
+    };
   }, []);
 
-  const handleSignInClick = () => { // <--- CREATE HANDLER
-    navigate('/auth');
+  // Handler for the Sign In button
+  const handleSignInClick = () => {
+    navigate('/auth'); // Navigates to the /auth route
   };
 
   return (
@@ -177,7 +188,7 @@ const Index = () => {
           <Button 
             variant="outline" 
             className="border-white text-black bg-white hover:bg-gray-100 hover:text-black font-semibold"
-            onClick={handleSignInClick} // <--- ATTACH HANDLER
+            onClick={handleSignInClick} // Attach the handler here
           >
             Sign In
           </Button>
