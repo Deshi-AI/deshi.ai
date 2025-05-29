@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext'; // Assuming this is for your Google/Primary Auth
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { User as UserIcon, Slack, CheckCircle2, XCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { User as UserIcon, Slack, CheckCircle2, ExternalLink, Loader2, Settings, Bot } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 
 // Define a type for your Deshi user object (adjust as per your primary auth)
@@ -27,8 +27,8 @@ const SLACK_SCOPES = import.meta.env.VITE_SLACK_APP_SCOPES;
 // This is the URI your BACKEND will receive the callback at from Slack
 const SLACK_BACKEND_CALLBACK_URI = import.meta.env.VITE_SLACK_BACKEND_REDIRECT_URI; 
 
-// Base URL for your backend (optional if SLACK_BACKEND_CALLBACK_URI is absolute)
-// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const DESHI_COLLECTOR_URL = "https://deshi-collector.streamlit.app/";
+const REPLICA_MANAGER_URL = "https://replicamanager.streamlit.app/";
 
 
 const DashboardPage = () => {
@@ -40,54 +40,77 @@ const DashboardPage = () => {
   const [slackConnection, setSlackConnection] = useState<SlackConnection | null>(null);
   const [isConnectingSlack, setIsConnectingSlack] = useState(false);
   const [isLoadingPageData, setIsLoadingPageData] = useState(true);
+  const [iframeCollectorLoading, setIframeCollectorLoading] = useState(true);
+  const [iframeManagerLoading, setIframeManagerLoading] = useState(true);
 
   useEffect(() => {
     if (!authIsLoading && googleUser) {
-      // Assuming googleUser.sub is the unique ID you use for Deshi user
-      // In a real app, you might fetch more Deshi user details from your backend
       setDeshiUser({ 
-        id: googleUser.sub || "unknown_user_id", // Use googleUser.sub or another unique identifier
+        id: googleUser.sub || "unknown_user_id",
         name: googleUser.name, 
         email: googleUser.email, 
         picture: googleUser.picture 
       });
     } else if (!authIsLoading && !googleUser) {
-      navigate('/auth'); // Should be handled by ProtectedRoute
+      navigate('/auth'); 
     }
   }, [googleUser, authIsLoading, navigate]);
 
   useEffect(() => {
-    // This effect runs when deshiUser is set and handles Slack redirect params
     if (deshiUser) { 
-      setIsLoadingPageData(true); // Start loading page-specific data
+      setIsLoadingPageData(true);
       const slackStatus = searchParams.get('slack_link_status');
       const teamId = searchParams.get('team_id');
+      const teamName = searchParams.get('team_name'); // Assuming backend might send team_name
       const errorMessage = searchParams.get('error_message');
 
       if (slackStatus === 'success' && teamId) {
-        // TODO: Fetch actual team name from your backend for a better UX
-        // For now, just use team_id
-        setSlackConnection({ team_id: teamId, is_active: true, team_name: `Workspace ${teamId.substring(0,5)}...` });
+        setSlackConnection({ 
+          team_id: teamId, 
+          is_active: true, 
+          team_name: teamName || `Workspace ${teamId.substring(0,5)}...` 
+        });
         toast.success("Slack connected successfully!");
       } else if (slackStatus === 'error') {
         toast.error(`Slack Connection Error: ${errorMessage || "Unknown error"}`);
       } else {
         // TODO: Implement fetching current Slack connection status from your backend
-        // e.g., GET /api/v1/users/me/slack-integration
-        // This is important if the user reloads the page or navigates back.
-        // For now, we assume no connection if not redirected.
-        // setSlackConnection(null); 
+        // For now, check localStorage or a similar mechanism if you persist this info client-side after successful connection,
+        // or make a fetch call to your backend to get the current status.
+        // Example:
+        // const checkSlackStatus = async () => {
+        //   try {
+        //     const response = await fetch('/api/v1/slack/status'); // your backend endpoint
+        //     if (response.ok) {
+        //       const data = await response.json();
+        //       if (data.connected && data.team_id) {
+        //         setSlackConnection({ team_id: data.team_id, team_name: data.team_name, is_active: true });
+        //       } else {
+        //         setSlackConnection(null);
+        //       }
+        //     }
+        //   } catch (error) {
+        //     console.error("Failed to fetch slack status", error);
+        //     setSlackConnection(null);
+        //   } finally {
+        //      setIsLoadingPageData(false);
+        //   }
+        // };
+        // checkSlackStatus();
+        // For this example, we'll assume it needs to be fetched or it's not connected.
+        // To simulate a previously connected state for testing UI, you can temporarily set it:
+        // setSlackConnection({ team_id: "T12345", team_name: "Test Workspace", is_active: true }); 
         console.log("No Slack redirect params found, or need to fetch current status.");
       }
       
-      // Clean up URL params
-      if (slackStatus || teamId || errorMessage) {
+      if (slackStatus || teamId || errorMessage || teamName) {
         searchParams.delete('slack_link_status');
         searchParams.delete('team_id');
+        searchParams.delete('team_name');
         searchParams.delete('error_message');
         setSearchParams(searchParams, { replace: true });
       }
-      setIsLoadingPageData(false);
+      setIsLoadingPageData(false); // Moved here to ensure it's set after processing params or fetching status
     }
   }, [deshiUser, searchParams, setSearchParams]);
 
@@ -100,15 +123,7 @@ const DashboardPage = () => {
     }
     setIsConnectingSlack(true);
     
-    // The redirect_uri is where Slack sends the user AFTER authorization.
-    // This URI MUST be registered in your Slack App settings and point to your backend.
     const encodedRedirectUri = encodeURIComponent(SLACK_BACKEND_CALLBACK_URI);
-    
-    // Optional: Add a 'state' parameter for CSRF protection. Your backend must verify it.
-    // const state = Math.random().toString(36).substring(2, 15);
-    // sessionStorage.setItem('slackOauthState', state);
-    // const slackAuthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${SLACK_SCOPES}&redirect_uri=${encodedRedirectUri}&state=${state}&user_scope=`;
-
     const slackAuthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${SLACK_SCOPES}&redirect_uri=${encodedRedirectUri}&user_scope=`;
     
     window.location.href = slackAuthUrl;
@@ -119,7 +134,7 @@ const DashboardPage = () => {
     navigate('/auth'); 
   };
 
-  if (authIsLoading || isLoadingPageData) {
+  if (authIsLoading || (isLoadingPageData && !deshiUser)) { // Ensure deshiUser is loaded before showing dashboard content
     return (
         <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center font-space">
             <Loader2 className="w-12 h-12 animate-spin text-sky-400" />
@@ -129,6 +144,7 @@ const DashboardPage = () => {
   }
 
   if (!googleUser || !deshiUser) {
+    // This case should ideally be caught by ProtectedRoute, but as a fallback:
     return <div className="text-white text-center p-10 font-space min-h-screen flex items-center justify-center bg-gray-900">User not authenticated. Redirecting...</div>;
   }
 
@@ -168,29 +184,41 @@ const DashboardPage = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl text-gray-100">
                 <Slack className="w-6 h-6 text-sky-400" />
-                Slack Integration
+                Slack Integration & Data Collection
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Connect your Slack workspace for message collection to train your Deshi AI Replicas.
+                Connect your Slack workspace and configure data collection for your Deshi AI Replicas.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {slackConnection && slackConnection.is_active ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center gap-2 text-green-400">
                     <CheckCircle2 className="w-5 h-5" />
                     <p>Successfully connected to Slack workspace: <strong>{slackConnection.team_name || slackConnection.team_id}</strong></p>
                   </div>
                   <p className="text-sm text-gray-400">
-                    Next, you'll need to specify which employee's messages Deshi should focus on from this workspace.
+                    Use the interface below to manage and monitor data collection from your connected Slack workspace.
                   </p>
-                   <Button variant="outline" className="border-sky-500 text-sky-500 hover:bg-sky-500/10">
-                    Configure Target Employee
-                  </Button>
-                  {/* <Button variant="ghost" className="text-red-400 hover:bg-red-500/10">
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Disconnect Slack
-                  </Button> */}
+                  <div className="aspect-video relative">
+                    {iframeCollectorLoading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800/70 rounded-md">
+                        <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
+                        <p className="mt-2 text-gray-300">Loading Data Collector...</p>
+                      </div>
+                    )}
+                    <iframe
+                      src={DESHI_COLLECTOR_URL}
+                      title="Deshi Data Collector"
+                      className={`w-full h-full border-0 rounded-md ${iframeCollectorLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
+                      onLoad={() => setIframeCollectorLoading(false)}
+                      onError={() => {
+                        setIframeCollectorLoading(false);
+                        toast.error("Failed to load Data Collector application.");
+                      }}
+                      allowFullScreen
+                    ></iframe>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -220,13 +248,39 @@ const DashboardPage = () => {
 
           <Card className="bg-gray-800/50 border-gray-700 shadow-xl">
             <CardHeader>
-              <CardTitle className="text-xl text-gray-100">AI Replica Management</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl text-gray-100">
+                <Bot className="w-6 h-6 text-purple-400" />
+                AI Replica Management
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Manage, train, and interact with your AI Replicas.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-400">
-                Once Slack is connected and a target employee is configured, you can manage and train your AI Replicas here.
-              </p>
-               {/* Placeholder for future content */}
+              {(!slackConnection || !slackConnection.is_active) && (
+                 <p className="text-gray-400 text-sm mb-4">
+                    Please connect to Slack first to enable AI Replica management.
+                  </p>
+              )}
+              <div className="aspect-video relative">
+                {iframeManagerLoading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800/70 rounded-md">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+                    <p className="mt-2 text-gray-300">Loading Replica Manager...</p>
+                  </div>
+                )}
+                <iframe
+                  src={REPLICA_MANAGER_URL}
+                  title="AI Replica Manager"
+                  className={`w-full h-full border-0 rounded-md ${iframeManagerLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
+                  onLoad={() => setIframeManagerLoading(false)}
+                  onError={() => {
+                    setIframeManagerLoading(false);
+                    toast.error("Failed to load Replica Manager application.");
+                  }}
+                  allowFullScreen
+                ></iframe>
+              </div>
             </CardContent>
           </Card>
         </main>
