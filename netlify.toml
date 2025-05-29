@@ -1,0 +1,12 @@
+# netlify.toml
+
+# Build settings (Netlify often auto-detects these for Vite but good to specify)
+[build]
+  command = "npm run build" # Or your build command
+  publish = "dist"          # Your build output directory
+
+# Redirect rule for SPA
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
