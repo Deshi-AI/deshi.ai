@@ -1,27 +1,135 @@
 // src/pages/DashboardPage.tsx
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext'; // Use your AuthContext
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext'; // Assuming this is for your Google/Primary Auth
 import { Button } from '@/components/ui/button';
-import { User as UserIcon } from 'lucide-react'; // Renamed to avoid conflict
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { User as UserIcon, Slack, CheckCircle2, XCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
+
+// Define a type for your Deshi user object (adjust as per your primary auth)
+interface DeshiUser {
+  id: string; 
+  name?: string;
+  email?: string;
+  picture?: string; 
+}
+
+interface SlackConnection {
+  team_id: string;
+  team_name?: string; 
+  is_active: boolean;
+}
+
+// Get Slack config from .env variables
+const SLACK_CLIENT_ID = import.meta.env.VITE_SLACK_CLIENT_ID;
+const SLACK_SCOPES = import.meta.env.VITE_SLACK_APP_SCOPES;
+// This is the URI your BACKEND will receive the callback at from Slack
+const SLACK_BACKEND_CALLBACK_URI = import.meta.env.VITE_SLACK_BACKEND_REDIRECT_URI; 
+
+// Base URL for your backend (optional if SLACK_BACKEND_CALLBACK_URI is absolute)
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const { user, signOutGoogle, isLoading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user: googleUser, signOutGoogle, isLoading: authIsLoading } = useAuth(); 
+  
+  const [deshiUser, setDeshiUser] = useState<DeshiUser | null>(null);
+  const [slackConnection, setSlackConnection] = useState<SlackConnection | null>(null);
+  const [isConnectingSlack, setIsConnectingSlack] = useState(false);
+  const [isLoadingPageData, setIsLoadingPageData] = useState(true);
+
+  useEffect(() => {
+    if (!authIsLoading && googleUser) {
+      // Assuming googleUser.sub is the unique ID you use for Deshi user
+      // In a real app, you might fetch more Deshi user details from your backend
+      setDeshiUser({ 
+        id: googleUser.sub || "unknown_user_id", // Use googleUser.sub or another unique identifier
+        name: googleUser.name, 
+        email: googleUser.email, 
+        picture: googleUser.picture 
+      });
+    } else if (!authIsLoading && !googleUser) {
+      navigate('/auth'); // Should be handled by ProtectedRoute
+    }
+  }, [googleUser, authIsLoading, navigate]);
+
+  useEffect(() => {
+    // This effect runs when deshiUser is set and handles Slack redirect params
+    if (deshiUser) { 
+      setIsLoadingPageData(true); // Start loading page-specific data
+      const slackStatus = searchParams.get('slack_link_status');
+      const teamId = searchParams.get('team_id');
+      const errorMessage = searchParams.get('error_message');
+
+      if (slackStatus === 'success' && teamId) {
+        // TODO: Fetch actual team name from your backend for a better UX
+        // For now, just use team_id
+        setSlackConnection({ team_id: teamId, is_active: true, team_name: `Workspace ${teamId.substring(0,5)}...` });
+        toast.success("Slack connected successfully!");
+      } else if (slackStatus === 'error') {
+        toast.error(`Slack Connection Error: ${errorMessage || "Unknown error"}`);
+      } else {
+        // TODO: Implement fetching current Slack connection status from your backend
+        // e.g., GET /api/v1/users/me/slack-integration
+        // This is important if the user reloads the page or navigates back.
+        // For now, we assume no connection if not redirected.
+        // setSlackConnection(null); 
+        console.log("No Slack redirect params found, or need to fetch current status.");
+      }
+      
+      // Clean up URL params
+      if (slackStatus || teamId || errorMessage) {
+        searchParams.delete('slack_link_status');
+        searchParams.delete('team_id');
+        searchParams.delete('error_message');
+        setSearchParams(searchParams, { replace: true });
+      }
+      setIsLoadingPageData(false);
+    }
+  }, [deshiUser, searchParams, setSearchParams]);
+
+
+  const handleAddDeshiToSlack = () => {
+    if (!SLACK_CLIENT_ID || !SLACK_SCOPES || !SLACK_BACKEND_CALLBACK_URI) {
+      toast.error("Slack integration is not configured properly on the frontend. Please contact support.");
+      console.error("Missing Slack configuration (VITE_SLACK_CLIENT_ID, VITE_SLACK_APP_SCOPES, or VITE_SLACK_BACKEND_REDIRECT_URI) in .env");
+      return;
+    }
+    setIsConnectingSlack(true);
+    
+    // The redirect_uri is where Slack sends the user AFTER authorization.
+    // This URI MUST be registered in your Slack App settings and point to your backend.
+    const encodedRedirectUri = encodeURIComponent(SLACK_BACKEND_CALLBACK_URI);
+    
+    // Optional: Add a 'state' parameter for CSRF protection. Your backend must verify it.
+    // const state = Math.random().toString(36).substring(2, 15);
+    // sessionStorage.setItem('slackOauthState', state);
+    // const slackAuthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${SLACK_SCOPES}&redirect_uri=${encodedRedirectUri}&state=${state}&user_scope=`;
+
+    const slackAuthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${SLACK_SCOPES}&redirect_uri=${encodedRedirectUri}&user_scope=`;
+    
+    window.location.href = slackAuthUrl;
+  };
 
   const handleSignOut = () => {
-    signOutGoogle();
+    signOutGoogle(); 
     navigate('/auth'); 
   };
 
-  if (isLoading) {
-    return <p className="text-white text-center p-10 font-space">Loading dashboard...</p>;
+  if (authIsLoading || isLoadingPageData) {
+    return (
+        <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center font-space">
+            <Loader2 className="w-12 h-12 animate-spin text-sky-400" />
+            <p className="mt-4 text-lg">Loading Dashboard...</p>
+        </div>
+    );
   }
 
-  if (!user) {
-    // This case should ideally be handled by ProtectedRoute
-    // navigate('/auth'); // Already handled by ProtectedRoute, could cause loop if not careful
-    return <p className="text-white text-center p-10 font-space">Redirecting to login...</p>;
+  if (!googleUser || !deshiUser) {
+    return <div className="text-white text-center p-10 font-space min-h-screen flex items-center justify-center bg-gray-900">User not authenticated. Redirecting...</div>;
   }
 
   return (
@@ -30,45 +138,97 @@ const DashboardPage = () => {
         <header className="flex flex-col sm:flex-row justify-between items-center mb-8 pb-4 border-b border-gray-700">
           <h1 className="text-3xl font-bold mb-4 sm:mb-0">Deshi Dashboard</h1>
           <div className="flex items-center gap-4">
-            {user.picture ? (
-              <img src={user.picture} alt={user.name || 'User Avatar'} className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
+            {deshiUser.picture ? (
+              <img src={deshiUser.picture} alt={deshiUser.name || 'User Avatar'} className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
             ) : (
               <UserIcon className="w-8 h-8 text-gray-400 bg-gray-700 p-1 rounded-full" />
             )}
             <span className="text-sm text-gray-300 hidden sm:block">
-              {user.name || user.email}
+              {deshiUser.name || deshiUser.email}
             </span>
             <Button 
               onClick={handleSignOut} 
               variant="destructive"
               size="sm"
-              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
             >
               Sign Out
             </Button>
           </div>
         </header>
         
-        <main>
-          <p className="text-xl mb-6">Welcome, <span className="font-semibold">{user.name || user.email || 'User'}</span>!</p>
-          {/* <p className="text-gray-400 text-sm">Your Google User ID (sub): {user.sub}</p> */}
-          
-          <div className="mt-8 p-6 bg-gray-800/50 rounded-xl shadow-xl border border-gray-700">
-            <h2 className="text-2xl font-semibold mb-6 text-gray-100">AI Replica Management</h2>
-            <p className="text-gray-300">
-              This is where you will configure your AI replica, connect data sources, initiate training, and interact with your digital twin.
-            </p>
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-4 bg-gray-700/50 rounded-lg">
-                <h3 className="font-semibold text-lg mb-2">Replica Status</h3>
-                <p className="text-sm text-gray-400">Not Configured</p>
-              </div>
-              <div className="p-4 bg-gray-700/50 rounded-lg">
-                <h3 className="font-semibold text-lg mb-2">Data Sources</h3>
-                <p className="text-sm text-gray-400">No sources connected</p>
-              </div>
-            </div>
-          </div>
+        <main className="space-y-8">
+          <Card className="bg-gray-800/50 border-gray-700 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-2xl text-gray-100">Welcome, {deshiUser.name || deshiUser.email || 'User'}!</CardTitle>
+              <CardDescription className="text-gray-400">Manage your AI Replicas and data integrations.</CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card className="bg-gray-800/50 border-gray-700 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl text-gray-100">
+                <Slack className="w-6 h-6 text-sky-400" />
+                Slack Integration
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Connect your Slack workspace for message collection to train your Deshi AI Replicas.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {slackConnection && slackConnection.is_active ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <p>Successfully connected to Slack workspace: <strong>{slackConnection.team_name || slackConnection.team_id}</strong></p>
+                  </div>
+                  <p className="text-sm text-gray-400">
+                    Next, you'll need to specify which employee's messages Deshi should focus on from this workspace.
+                  </p>
+                   <Button variant="outline" className="border-sky-500 text-sky-500 hover:bg-sky-500/10">
+                    Configure Target Employee
+                  </Button>
+                  {/* <Button variant="ghost" className="text-red-400 hover:bg-red-500/10">
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Disconnect Slack
+                  </Button> */}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-gray-300">
+                    Your Deshi AI is not yet connected to a Slack workspace.
+                  </p>
+                  <Button 
+                    onClick={handleAddDeshiToSlack}
+                    disabled={isConnectingSlack}
+                    className="bg-sky-500 hover:bg-sky-600 text-white font-semibold text-base"
+                    size="lg"
+                  >
+                    {isConnectingSlack ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-2 h-5 w-5" />
+                    )}
+                    Add Deshi to Slack
+                  </Button>
+                  <p className="text-xs text-gray-500">
+                    You will be redirected to Slack to authorize the "Deshi Knowledge Collector" app.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-800/50 border-gray-700 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-xl text-gray-100">AI Replica Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-400">
+                Once Slack is connected and a target employee is configured, you can manage and train your AI Replicas here.
+              </p>
+               {/* Placeholder for future content */}
+            </CardContent>
+          </Card>
         </main>
       </div>
     </div>
