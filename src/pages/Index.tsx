@@ -4,7 +4,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Brain, Clock, Rocket, Share2, Workflow, Users, MessageSquare, Search, PlugZap, FileText, GraduationCap, UserCog, AlertTriangle, ArchiveX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom'; // Ensure useNavigate is imported
+import { useNavigate } from 'react-router-dom'; 
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -13,9 +13,16 @@ const Index = () => {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate(); 
+
+  const DEMO_VIDEO_URL = "https://supercut.ai/share/default01/c8rCpWfZko0-dnOD_JuseL";
+  const BETA_EMAIL_RECIPIENT = "thatspacebiker@gmail.com";
+  const BETA_EMAIL_SUBJECT = "Beta Access Request for Deshi.ai";
+  const BETA_EMAIL_BODY = "Hello Deshi.ai Team,\n\nI would like to request beta access to Deshi.ai.\n\n[Optional: You can add a line here about why you're interested or your company details]\n\nThanks,\n[Your Name]";
+
 
   useEffect(() => {
+    let clickHandler: ((e: MouseEvent) => void) | null = null;
     const ctx = gsap.context(() => {
       const tl = gsap.timeline();
       
@@ -46,10 +53,10 @@ const Index = () => {
         });
       });
 
-      // This event listener for particle animation should not interfere with button clicks.
-      // It's better to scope such listeners if possible, but it's unlikely to be the cause
-      // if navigation is already occurring.
-      const clickHandler = (e: MouseEvent) => {
+      clickHandler = (e: MouseEvent) => {
+        // Check if the click target is one of the interactive buttons
+        // to prevent particle animation on button clicks if desired.
+        // For now, it animates on any click.
         particles.forEach((particle) => {
           gsap.to(particle as HTMLElement, {
             scale: "random(1.5, 2.5)",
@@ -127,17 +134,27 @@ const Index = () => {
 
     }, heroRef);
 
-    // Cleanup function for the document event listener
     return () => {
-      document.removeEventListener('click', (ctx.data as any).clickHandler); // Assuming clickHandler was stored in ctx.data or made accessible
+      if (clickHandler) {
+        document.removeEventListener('click', clickHandler);
+      }
       ctx.revert();
     };
   }, []);
 
-  // Handler for the Sign In button
   const handleSignInClick = () => {
-    navigate('/auth'); // Navigates to the /auth route
+    navigate('/auth'); 
   };
+
+  const handleWatchDemoClick = () => {
+    window.open(DEMO_VIDEO_URL, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleRequestBetaAccessClick = () => {
+    const mailtoLink = `mailto:${BETA_EMAIL_RECIPIENT}?subject=${encodeURIComponent(BETA_EMAIL_SUBJECT)}&body=${encodeURIComponent(BETA_EMAIL_BODY)}`;
+    window.location.href = mailtoLink;
+  };
+
 
   return (
     <div ref={heroRef} className="bg-black text-white min-h-screen overflow-x-hidden relative font-space">
@@ -186,7 +203,7 @@ const Index = () => {
           <Button 
             variant="outline" 
             className="border-white text-black bg-white hover:bg-gray-100 hover:text-black font-semibold"
-            onClick={handleSignInClick} // Attach the handler here
+            onClick={handleSignInClick} 
           >
             Sign In
           </Button>
@@ -214,17 +231,29 @@ const Index = () => {
           </p>
           
           <div ref={ctaRef} className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="bg-white text-black hover:bg-gray-100 text-lg px-8 py-4 font-semibold">
+            <Button 
+              size="lg" 
+              className="bg-white text-black hover:bg-gray-100 text-lg px-8 py-4 font-semibold"
+              onClick={handleRequestBetaAccessClick}
+            >
               Request Beta Access
             </Button>
-            <Button size="lg" variant="outline" className="border-white text-black bg-white hover:bg-gray-100 hover:text-black text-lg px-8 py-4 font-semibold">
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="border-white text-black bg-white hover:bg-gray-100 hover:text-black text-lg px-8 py-4 font-semibold"
+              onClick={handleWatchDemoClick}
+            >
               Watch Demo
             </Button>
           </div>
         </div>
       </section>
 
-      <section className="gradient-section py-24 px-6 relative">
+      {/* ... (rest of your sections: Knowledge Walks Out, Enterprise Replicas, Simple Steps, Scale Expertise) ... */}
+      {/* These sections remain unchanged from your original code, so I'm omitting them for brevity */}
+      {/* Make sure to include them if you are copy-pasting the entire file content. */}
+       <section className="gradient-section py-24 px-6 relative">
         <div className="max-w-6xl mx-auto relative z-10">
           <div className="text-center mb-16 smooth-fade">
             <AlertTriangle className="w-16 h-16 mx-auto mb-6 text-gray-400" />
@@ -367,13 +396,18 @@ const Index = () => {
         </div>
       </section>
 
+
       <section id="beta" className="gradient-section py-24 px-6 relative">
         <div className="max-w-4xl mx-auto text-center smooth-fade relative z-10">
           <h2 className="text-5xl font-bold mb-6 tracking-tight">Ready to Future-Proof Your Knowledge?</h2>
           <p className="text-xl text-gray-300 mb-12 max-w-2xl mx-auto font-medium">
             Don't let your company's wisdom walk away. Join the beta and transform how your organization preserves and shares expertise.
           </p>
-          <Button size="lg" className="bg-white text-black hover:bg-gray-100 text-lg px-12 py-4 font-semibold">
+          <Button 
+            size="lg" 
+            className="bg-white text-black hover:bg-gray-100 text-lg px-12 py-4 font-semibold"
+            onClick={handleRequestBetaAccessClick}
+          >
             Request Beta Access
           </Button>
         </div>
